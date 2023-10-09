@@ -1,0 +1,70 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, LSTM, Dropout
+
+# Step 1: Collect historical stock price dataset of the company you want to predict
+df = pd.read_csv('historical_stock_prices.csv')
+
+# Step 2: Import necessary libraries
+
+# Step 3: Load the dataset into your notebook
+# Assuming the dataset has columns 'Date' and 'Close'
+data = df.filter(['Close'])
+
+# Step 4: Preprocess and clean the data for training the LSTM model
+# Scale the data using MinMaxScaler
+scaler = MinMaxScaler(feature_range=(0,1))
+scaled_data = scaler.fit_transform(data)
+
+# Split the data into train and test sets
+train_data = scaled_data[:int(len(scaled_data)*0.8)]
+test_data = scaled_data[int(len(scaled_data)*0.8):]
+
+# Create training and testing datasets
+def create_dataset(dataset, time_step=1):
+    X, Y = [], []
+    for i in range(len(dataset)-time_step-1):
+        X.append(dataset[i:(i+time_step), 0])
+        Y.append(dataset[i+time_step, 0])
+    return np.array(X), np.array(Y)
+
+# Use a time step of 60 days for training the model
+time_step = 60
+X_train, Y_train = create_dataset(train_data, time_step)
+X_test, Y_test = create_dataset(test_data, time_step)
+
+# Reshape the training and testing datasets for LSTM input
+X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
+X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+
+# Step 5: Build the LSTM model in TensorFlow
+model = Sequential()
+model.add(LSTM(units=50, return_sequences=True, input_shape=(X_train.shape[1], 1)))
+model.add(Dropout(0.2))
+model.add(LSTM(units=50, return_sequences=True))
+model.add(Dropout(0.2))
+model.add(LSTM(units=50))
+model.add(Dropout(0.2))
+model.add(Dense(units=1))
+
+# Compile the model
+model.compile(optimizer='adam', loss='mean_squared_error')
+
+# Step 6: Train the model on the training data and evaluate its performance on the test data
+model.fit(X_train, Y_train, validation_data=(X_test, Y_test), epochs=100, batch_size=32)
+
+# Step 7: Use the trained model to predict future stock prices
+# You can use future dates or real-time stock prices as input here
+# Predict the next day's stock price using the last 60 days' stock prices
+last_60_days = data[-60:].values
+last_60_days_scaled = scaler.transform(last_60_days)
+X_test_new = []
+X_test_new.append(last_60_days_scaled)
+X_test_new = np.array(X_test_new)
+X_test_new = np.reshape(X_test_new, (X_test_new.shape[0], X_test_new.shape[1], 1))
+predicted_price = model.predict(X_test_new)
+predicted_price = scaler.inverse_transform(predicted_price)
+print("Predicted stock price for the next day:", predicted_price)
